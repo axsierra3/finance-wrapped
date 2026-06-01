@@ -134,6 +134,12 @@ class _OverviewPageState extends State<OverviewPage> {
             ),
             const SizedBox(height: 20),
 
+          // trend chart — only shows if 2+ months of data exist
+          if (dataAnalysis.getSpendingByMonth().length >= 2) ...[
+            _buildTrendChart(dataAnalysis),
+          ],
+          const SizedBox(height: 4),
+
             // ── PIE CHART TITLE ─────────────────────────
             const Text(
               'Spending by Category',
@@ -259,7 +265,7 @@ class _OverviewPageState extends State<OverviewPage> {
             }),
             const SizedBox(height: 16),
 
-/*
+
             // ── BOTTOM INSIGHT CARDS ────────────────────
             Row(
               children: [
@@ -324,7 +330,6 @@ class _OverviewPageState extends State<OverviewPage> {
                 ),
               ],
             ),
-            */
             const SizedBox(height: 16),
           ],
         ),
@@ -373,4 +378,202 @@ class _OverviewPageState extends State<OverviewPage> {
     ];
     return colors[index % colors.length];
   }
+
+//Month by month line chart that shows trend over time of monthly spending
+//only shown if user has 2 or more months of data
+  Widget _buildTrendChart(DataAnalysis dataAnalysis) {
+  final byMonth = dataAnalysis.getSpendingByMonth();
+
+  // need at least 2 months to show a trend
+  if (byMonth.length < 2) return const SizedBox.shrink();
+
+  // sort months chronologically
+  final sortedMonths = byMonth.keys.toList()..sort();
+  final values = sortedMonths.map((m) => byMonth[m]!).toList();
+  final maxVal = values.reduce((a, b) => a > b ? a : b);
+  final minVal = values.reduce((a, b) => a < b ? a : b);
+
+  // format "2026-04" → "Apr" for x axis labels
+  String shortMonth(String key) {
+    const months = [
+      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final parts = key.split('-');
+    if (parts.length != 2) return key;
+    return months[int.tryParse(parts[1]) ?? 0];
+  }
+
+  // find peak month for label
+  final peakIndex = values.indexOf(maxVal);
+  final peakMonthLabel = shortMonth(sortedMonths[peakIndex]);
+
+  // build fl_chart spots — x = index, y = spending amount
+  final spots = List.generate(values.length, (i) {
+    return FlSpot(i.toDouble(), values[i]);
+  });
+
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: AppTheme.mintBorder.withValues(alpha: 0.5)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Monthly Spending Trend',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.darkGreen,
+          )),
+        const SizedBox(height: 16),
+
+        SizedBox(
+          height: 160,
+          child: LineChart(
+            LineChartData(
+              // disable grid lines — we draw our own below
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                horizontalInterval: maxVal / 3,
+                getDrawingHorizontalLine: (value) => FlLine(
+                  color: AppTheme.mintBorder.withValues(alpha: 0.4),
+                  strokeWidth: 0.5,
+                  dashArray: [4, 4],
+                ),
+              ),
+              // axis borders
+              borderData: FlBorderData(
+                show: true,
+                border: Border(
+                  bottom: BorderSide(
+                    color: AppTheme.mintBorder.withValues(alpha: 0.5),
+                    width: 0.5,
+                  ),
+                ),
+              ),
+              // x axis — month labels
+              titlesData: FlTitlesData(
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    interval: 1,
+                    getTitlesWidget: (value, meta) {
+                    final i = value.toInt();
+                    // only show label if value is exactly an integer
+                    // this prevents labels at fractional positions between months
+                    if (value != i.toDouble()) return const SizedBox.shrink();
+                    if (i < 0 || i >= sortedMonths.length) {
+                      return const SizedBox.shrink();
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        shortMonth(sortedMonths[i]),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppTheme.mutedGreen,
+                          ),
+                        ),
+                      );
+                    },
+                    reservedSize: 24,
+                  ),
+                ),
+                // hide all other axis labels
+                leftTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false)),
+                topTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false)),
+                rightTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false)),
+              ),
+              // touch interaction — shows tooltip on tap
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  getTooltipItems: (touchedSpots) {
+                    return touchedSpots.map((spot) {
+                      final month = sortedMonths[spot.x.toInt()];
+                      return LineTooltipItem(
+                        '${shortMonth(month)}\n\$${spot.y.toStringAsFixed(0)}',
+                        const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    }).toList();
+                  },
+                ),
+              ),
+              minX: 0,
+              maxX: (values.length - 1).toDouble(),
+              minY: 0,
+              maxY: maxVal * 1.2, // add 20% headroom above peak
+              lineBarsData: [
+                LineChartBarData(
+                  spots: spots,
+                  isCurved: true,
+                  curveSmoothness: 0.35,
+                  color: AppTheme.darkGreen,
+                  barWidth: 2.5,
+                  dotData: FlDotData(
+                    show: true,
+                    getDotPainter: (spot, percent, bar, index) {
+                      // peak dot is bigger and has mint outline
+                      final isPeak = values[index] == maxVal;
+                      return FlDotCirclePainter(
+                        radius: isPeak ? 5 : 3.5,
+                        color: AppTheme.darkGreen,
+                        strokeWidth: isPeak ? 2.5 : 0,
+                        strokeColor: AppTheme.mint,
+                      );
+                    },
+                  ),
+                  // filled area under the line
+                  belowBarData: BarAreaData(
+                    show: true,
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        AppTheme.darkGreen.withValues(alpha: 0.12),
+                        AppTheme.darkGreen.withValues(alpha: 0.0),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 10),
+        // lowest and peak labels at the bottom
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'lowest · ${shortMonth(sortedMonths[values.indexOf(minVal)])} \$${minVal.toStringAsFixed(0)}',
+              style: const TextStyle(
+                fontSize: 9, color: AppTheme.mutedGreen),
+            ),
+            Text(
+              'peak · $peakMonthLabel \$${maxVal.toStringAsFixed(0)}',
+              style: const TextStyle(
+                fontSize: 9,
+                color: AppTheme.darkGreen,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
 }

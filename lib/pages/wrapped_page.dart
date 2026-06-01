@@ -15,7 +15,11 @@ class WrappedPage extends StatefulWidget {
 
 class _WrappedPageState extends State<WrappedPage> {
   int _currentSlide = 0;
-  static const int _totalSlides = 5;
+  static const int _totalSlides = 6;
+
+  // guess slide state
+  String? _userGuess;        // which month the user tapped
+  bool _hasGuessed = false;  // whether they've guessed yet
 
   static const Color _ink = Color(0xFF111111);
   static const Color _cream = Color(0xFFFFF6DF);
@@ -25,15 +29,18 @@ class _WrappedPageState extends State<WrappedPage> {
     'Total',
     'Category',
     'Signature',
+    'Biggest month',
     'Peak day',
   ];
 
+//backgroound color gradients for each slide
   final List<List<Color>> _slideGradients = const [
-    [Color(0xFF101010), Color(0xFF1ED760)],
-    [Color(0xFF291B68), Color(0xFF67E8F9)],
-    [Color(0xFF0B3D2E), Color(0xFFF7D154)],
-    [Color(0xFF4527A0), Color(0xFFFF5C8A)],
-    [Color(0xFF11243C), Color(0xFFFF8A3D)],
+    [Color(0xFF101010), Color(0xFF1ED760)], //0 intro
+    [Color(0xFF291B68), Color(0xFF67E8F9)], //1 total
+    [Color(0xFF0B3D2E), Color(0xFFF7D154)], //2 top category
+    [Color(0xFF4527A0), Color(0xFFFF5C8A)], //3 badge
+    [const Color(0xFF1b4332), const Color(0xFF0f3460)], // 4 guess month 
+    [Color(0xFF11243C), Color(0xFFFF8A3D)], //5 biggest day
   ];
 
   _VisualMark _categoryMark(String category) {
@@ -135,18 +142,25 @@ class _WrappedPageState extends State<WrappedPage> {
     );
   }
 
-  void _nextSlide() {
-    if (_currentSlide < _totalSlides - 1) {
-      setState(() => _currentSlide++);
-    }
+ void _nextSlide() {
+  if (_currentSlide == 4 && !_hasGuessed) return; // lock next until guessed
+  if (_currentSlide < _totalSlides - 1) {
+    setState(() => _currentSlide++);
   }
+}
 
-  void _prevSlide() {
-    if (_currentSlide > 0) {
-      setState(() => _currentSlide--);
-    }
+void _prevSlide() {
+  if (_currentSlide > 0) {
+    setState(() {
+      _currentSlide--;
+      // reset guess if going back to guess slide
+      if (_currentSlide == 4) {
+        _userGuess = null;
+        _hasGuessed = false;
+      }
+    });
   }
-
+}
   String _formatCurrency(double value) {
     final isNegative = value < 0;
     final abs = value.abs();
@@ -178,6 +192,9 @@ class _WrappedPageState extends State<WrappedPage> {
         widget.dataAnalysis?.getBiggestSpendingDayVendorAmounts() ?? {};
     final badge = _getBadge();
     final gradient = _slideGradients[_currentSlide];
+    final biggestMonth = widget.dataAnalysis?.getBiggestSpendingMonth();
+    final biggestMonthAmount = widget.dataAnalysis?.getBiggestSpendingMonthAmount() ?? 0.0;
+    final availableMonths = widget.dataAnalysis?.getSpendingByMonth().keys.toList() ?? [];
 
     return Scaffold(
       backgroundColor: gradient.first,
@@ -240,6 +257,9 @@ class _WrappedPageState extends State<WrappedPage> {
                       biggestDayAmount: biggestDayAmount,
                       biggestDayVendors: biggestDayVendors,
                       badge: badge,
+                      biggestMonth: biggestMonth,
+                      biggestMonthAmount: biggestMonthAmount,
+                      availableMonths: availableMonths,
                     ),
                   ),
                 ),
@@ -375,7 +395,11 @@ class _WrappedPageState extends State<WrappedPage> {
     required double biggestDayAmount,
     required Map<String, double> biggestDayVendors,
     required _BadgeInfo badge,
+    required String? biggestMonth,
+    required double biggestMonthAmount,
+    required List<String> availableMonths,
   }) {
+    //switch  on current slide index tp return the right slide widget, pass in all the data it needs
     switch (_currentSlide) {
       case 0:
         return _slideIntro(key: key, firstName: firstName);
@@ -390,7 +414,13 @@ class _WrappedPageState extends State<WrappedPage> {
         );
       case 3:
         return _slideBadge(key: key, badge: badge);
-      case 4:
+        case 4: return _slideGuessMonth(
+        key: key,
+        biggestMonth: biggestMonth,
+        biggestMonthAmount: biggestMonthAmount,
+        availableMonths: availableMonths,
+  );
+      case 5:
         return _slideBiggestDay(
           key: key,
           day: biggestDay,
@@ -597,6 +627,177 @@ class _WrappedPageState extends State<WrappedPage> {
       ),
     );
   }
+
+  Widget _slideGuessMonth({
+  required Key key,
+  required String? biggestMonth,
+  required double biggestMonthAmount,
+  required List<String> availableMonths,
+}) {
+  // format "2026-04" → "April 2026" for display
+  String formatMonth(String key) {
+    const months = [
+      '', 'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    final parts = key.split('-');
+    if (parts.length != 2) return key;
+    final monthNum = int.tryParse(parts[1]) ?? 0;
+    return '${months[monthNum]} ${parts[0]}';
+  }
+
+  final formattedBiggest = biggestMonth != null
+      ? formatMonth(biggestMonth)
+      : '—';
+
+  // only show this slide if there are multiple months to guess from
+  // if only one month just skip to reveal
+  final showGuess = availableMonths.length > 1 && !_hasGuessed;
+  final showReveal = _hasGuessed || availableMonths.length <= 1;
+
+  return _slideFrame(
+    key: key,
+    child: SingleChildScrollView(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text('BIGGEST SPENDING MONTH',
+            style: TextStyle(
+              color: Colors.white54, fontSize: 10, letterSpacing: 2)),
+          const SizedBox(height: 20),
+
+          const Text('Which month did you\nspend the most?',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+              height: 1.3,
+            )),
+          const SizedBox(height: 8),
+
+          Text(
+            _hasGuessed
+                ? (_userGuess == biggestMonth
+                    ? 'you know yourself too well'
+                    : 'not quite...')
+                : 'take a guess before we reveal',
+            style: const TextStyle(
+              color: Colors.white60, fontSize: 13),
+          ),
+          const SizedBox(height: 24),
+
+          // guess buttons — one per available month
+          ...availableMonths.map((month) {
+            final isCorrect = month == biggestMonth;
+            final isGuessed = month == _userGuess;
+            final formatted = formatMonth(month);
+
+            Color bgColor = Colors.white.withValues(alpha: 0.1);
+            Color borderColor = Colors.white.withValues(alpha: 0.25);
+            Color textColor = Colors.white;
+            String label = formatted;
+
+            if (_hasGuessed) {
+              if (isCorrect) {
+                // highlight correct answer in mint
+                bgColor = const Color(0xFF4ecca3).withValues(alpha: 0.25);
+                borderColor = const Color(0xFF4ecca3);
+                textColor = const Color(0xFF4ecca3);
+                label = '$formatted ✓';
+              } else {
+                // dim wrong answers
+                bgColor = Colors.red.withValues(alpha: 0.15);
+                borderColor = Colors.red.withValues(alpha: 0.3);
+                textColor = Colors.white.withValues(alpha: 0.4);
+              }
+            }
+
+            return GestureDetector(
+              onTap: _hasGuessed ? null : () {
+                // record the guess and lock buttons
+                setState(() {
+                  _userGuess = month;
+                  _hasGuessed = true;
+                });
+              },
+              child: Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: textColor,
+                  ),
+                ),
+              ),
+            );
+          }),
+
+          // reveal card — shows after guessing
+          if (showReveal) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.2)),
+              ),
+              child: Column(
+                children: [
+                  const Text('YOUR BIGGEST MONTH',
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: 10,
+                      letterSpacing: 1,
+                    )),
+                  const SizedBox(height: 8),
+                  Text(
+                    formattedBiggest,
+                    style: const TextStyle(
+                      color: Color(0xFF4ecca3),
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600,
+                    )),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatCurrency(biggestMonthAmount),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                    )),
+                  const SizedBox(height: 8),
+                  Text(
+                    _userGuess == biggestMonth
+                        ? 'you called it. no surprises here.'
+                        : 'you really went off that month.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                    )),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
+}
 
   Widget _slideBiggestDay({
     required Key key,

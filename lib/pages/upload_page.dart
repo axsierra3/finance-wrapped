@@ -10,6 +10,9 @@ import 'package:flutter_finances_wrapped/app_theme.dart';
 class UploadPage extends StatefulWidget {
   final Function(List<List<dynamic>>) onCsvLoaded;
   final DataAnalysis? dataAnalysis; 
+  final String selectedFilter;
+  final List<String> availableMonths;
+  final Function(String) onFilterChanged;
 //required onCSvLoaded is a callback function, so it is a function defined in NavTabManager
 // when we call it here, execution jumps back up to NavTabManager with params passed in here
 // also must recieve processed data from NavTabManager
@@ -17,6 +20,9 @@ class UploadPage extends StatefulWidget {
     super.key,
     required this.onCsvLoaded,
     required this.dataAnalysis, //starts null, but when state rebuilds, nav will update it
+    required this.selectedFilter,                 // NEW
+    required this.availableMonths,                // NEW
+    required this.onFilterChanged,                // NEW
   });
 
   @override
@@ -32,7 +38,7 @@ class _UploadPageState extends State<UploadPage> {
 
 //state variables (allowed to change and will trigger UI rebuilds as they change)
   bool isLoading = false;
-  bool hasUploaded = false; // tracks if CSV has been uploaded this session
+  // bool hasUploaded = false; // tracks if CSV has been uploaded this session
   String message = "";
 
   bool get hasError => message.startsWith("Error");
@@ -50,7 +56,6 @@ class _UploadPageState extends State<UploadPage> {
       //navTabManager will handle creating the sheet, adding it to that user data object, run analyze to categorixe, and rebuild so other pages (overview and wrapped) get it
       widget.onCsvLoaded(rows); 
       setState(() {
-        hasUploaded = true;
         message = "Loaded successfully!";
       });
     } catch (e) {
@@ -150,11 +155,17 @@ class _UploadPageState extends State<UploadPage> {
               Text(
                 // if csvData is null nobody has uploaded yet → show prompt
                 // once csvData exists → show snapshot message
-                hasUploaded == false
+                widget.dataAnalysis == null
                     ? 'Upload your first balance sheet to start unwrapping...'
                     : 'Here\'s your financial snapshot.',
                 style: const TextStyle(fontSize: 15, color: _bodyColor),
               ),
+              // month filter chips — only show if there's data
+              if (widget.availableMonths.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _buildFilterChips(),
+                const SizedBox(height: 16), //room below chips
+              ],
 
               // total spending card — shows -- when no CSV yet
               _buildTotalCard(totalSpending),
@@ -249,7 +260,74 @@ class _UploadPageState extends State<UploadPage> {
     );
   }
 
-  // total spending big card at the top
+// Building the tabs for filtering by fixed time ranges and by months found
+Widget _buildFilterChips() {
+  // fixed filters always shown first
+  final fixedFilters = ['All Time', 'Past Year', 'Last 90 Days', 'Last 60 Days'];
+
+  // format month key "2026-04" → "Apr 2026" for display
+  String formatMonth(String key) {
+    const months = [
+      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final parts = key.split('-');
+    if (parts.length != 2) return key;
+    final monthNum = int.tryParse(parts[1]) ?? 0;
+    return '${months[monthNum]} ${parts[0]}';
+  }
+
+  // combine fixed filters + individual months
+  final allFilters = [...fixedFilters, ...widget.availableMonths];
+
+  return SizedBox(
+    height: 36,
+    child: ListView.separated(
+      scrollDirection: Axis.horizontal,
+      itemCount: allFilters.length,
+      separatorBuilder: (_, __) => const SizedBox(width: 8),
+      itemBuilder: (context, index) {
+        final filter = allFilters[index];
+        final isActive = filter == widget.selectedFilter;
+        final label = widget.availableMonths.contains(filter)
+            ? formatMonth(filter)
+            : filter;
+
+// each chip is a GestureDetector that calls onFilterChanged when tapped, passing the filter it represents
+        return GestureDetector(
+          onTap: () => widget.onFilterChanged(filter),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              // active = dark green, inactive = light mint
+              color: isActive
+                  ? AppTheme.darkGreen
+                  : Colors.white.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isActive
+                    ? AppTheme.darkGreen
+                    : AppTheme.mintBorder.withValues(alpha: 0.6),
+              ),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: isActive ? AppTheme.mint : AppTheme.mutedGreen,
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+
+
+  // total spending big card near the top
   Widget _buildTotalCard(double total) {
     return Container(
       width: double.infinity,

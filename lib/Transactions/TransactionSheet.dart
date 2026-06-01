@@ -10,6 +10,7 @@ class TransactionSheet {
     this.sheet = decodedSheet;
 
     for (int line = 1; line < decodedSheet.length; line++) {
+       if (decodedSheet[line].length < 6) continue; // skip short/empty rows
       Transaction currentTransaction = Transaction(
         decodedSheet[line][1].toString(), // date
         decodedSheet[line][2].toString(), // description

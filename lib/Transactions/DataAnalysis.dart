@@ -92,6 +92,8 @@ class DataAnalysis
     return vendors;
   }
 
+
+
   // returns map of vendor description -> total amount spent at that vendor on the biggest spending day
   Map<String, double> getBiggestSpendingDayVendorAmounts() {
     final biggestDay = getBiggestSpendingDay();
@@ -107,6 +109,39 @@ class DataAnalysis
     }
     return vendors;
   }
+
+// groups total spending by "YYYY-MM" key
+Map<String, double> getSpendingByMonth() {
+  final byMonth = <String, double>{};
+  for (var sheet in sheets) {
+    for (var t in sheet.transactions) {
+      final date = _parseDate(t.date);
+      if (date == null) continue;
+      final key = '${date.year}-${date.month.toString().padLeft(2, '0')}';
+      final amount = double.tryParse(t.amount) ?? 0.0;
+      byMonth[key] = (byMonth[key] ?? 0.0) + amount;
+    }
+  }
+  return byMonth;
+}
+
+  // returns the month key with the highest total spending
+  // e.g. "2026-04"
+  String? getBiggestSpendingMonth() {
+    final byMonth = getSpendingByMonth();
+    if (byMonth.length < 1) return null;
+    return byMonth.entries
+        .reduce((a, b) => a.value > b.value ? a : b)
+        .key;
+  }
+
+  // returns total spent in the biggest spending month
+  double getBiggestSpendingMonthAmount() {
+    final byMonth = getSpendingByMonth();
+    if (byMonth.isEmpty) return 0.0;
+    return byMonth.values.reduce((a, b) => a > b ? a : b);
+  }
+
 
   //----BADGES FOR WRAPPED------
  // checks if user is a "coffee addict" — bought coffee 2+ times
@@ -148,4 +183,56 @@ class DataAnalysis
     return topCat?.name.toLowerCase() == 'food';
   }
 
+
+// parses "MM-DD-YYYY" into a DateTime object
+// returns null if format is unexpected
+DateTime? _parseDate(String dateStr) {
+  try {
+    final parts = dateStr.split('-');
+    if (parts.length != 3) return null;
+    return DateTime(
+      int.parse(parts[2]), // year
+      int.parse(parts[0]), // month
+      int.parse(parts[1]), // day
+    );
+  } catch (e) {
+    return null;
+  }
+}
+
+// ── MOST FREQUENT VENDOR ─────────────────────────────
+// counts how many times each description appears
+// returns the one that appears most
+String? getMostFrequentVendor() {
+  final counts = <String, int>{};
+  for (var sheet in sheets) {
+    for (var t in sheet.transactions) {
+      counts[t.description] = (counts[t.description] ?? 0) + 1;
+    }
+  }
+  if (counts.isEmpty) return null;
+  return counts.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+}
+
+// ── MOST ACTIVE DAY OF WEEK ──────────────────────────
+// counts transactions per day of week
+// returns the name of the most active day
+String? getMostActiveDayOfWeek() {
+  final counts = <int, int>{};
+  for (var sheet in sheets) {
+    for (var t in sheet.transactions) {
+      final date = _parseDate(t.date);
+      if (date == null) continue;
+      counts[date.weekday] = (counts[date.weekday] ?? 0) + 1;
+    }
+  }
+  if (counts.isEmpty) return null;
+  final mostActive = counts.entries
+      .reduce((a, b) => a.value > b.value ? a : b).key;
+  const days = {
+    1: 'Monday', 2: 'Tuesday', 3: 'Wednesday',
+    4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday'
+  };
+  return days[mostActive];
+}
 }
