@@ -21,4 +21,10 @@ class TransactionSheet {
       transactions.add(currentTransaction);
     }
   }
+
+  // creates a TransactionSheet directly from Transaction objects
+  // used when loading from Firestore instead of parsing a CSV
+  TransactionSheet.fromTransactions(List<Transaction> transactions) {
+    this.transactions = transactions.toSet();
+  }
 }

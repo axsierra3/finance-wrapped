@@ -5,6 +5,7 @@ import 'pages/upload_page.dart';
 import 'pages/overview_page.dart';
 import 'pages/wrapped_page.dart';
 import 'app_theme.dart';
+import 'package:flutter_finances_wrapped/services/firestore_service.dart';
 
 class NavTabManager extends StatefulWidget {
   const NavTabManager({super.key});
@@ -20,12 +21,18 @@ class _NavTabManagerState extends State<NavTabManager> {
 
   // the logged-in user — will be initialized in initState
   UserData? currentUser;
+  // our connection to Firestore — handles all save/load operations
+  final FirestoreService _firestoreService = FirestoreService();
 
 //init state runs only once when NavtTavManager is first created, useful for setup
   @override
   void initState() {
     super.initState(); 
     currentUser = UserData.getCurrent(); //current user is null before login, but set to object later
+
+//load any previously saved transactions from Firestore
+//runs async so doesnt block UI from appearing
+    _loadFromFirestore();
   }
 
   void onCsvLoaded(List<List<dynamic>> rows) {
@@ -33,10 +40,36 @@ class _NavTabManagerState extends State<NavTabManager> {
 
     final newSheet = TransactionSheet(rows); //create a trans sheet from csv data from upload page
 
+    currentUser!.transactionSheets.clear();
     currentUser!.addTransactionSheet(newSheet); //add the new sheet to user's sheet list
     currentUser!.analyze(); //run analysis on new sheet (updates processed data and total spending in user data object)
 
+    _firestoreService.saveTransactions(
+      currentUser!.getAllTransactions().toList(),
+    );
     setState(() {}); //setState tells Flutter to rebuild NavTabManager, whcih repasses the updated currentUSer down to all pages
+  }
+
+  // to be called in initState to load any saved transactions from Firestore when app starts up
+  // called once on startup — checks if user has saved transactions
+ // and loads them automatically so they don't have to re-upload
+  Future<void> _loadFromFirestore() async {
+    final transactions = await _firestoreService.loadTransactions();
+    
+    // only do something if there's actually saved data
+    if (transactions.isEmpty) return;
+
+    // create a TransactionSheet from the loaded transactions
+    // we can't use the CSV row format here since we're loading
+    // Transaction objects directly from Firestore
+    final sheet = TransactionSheet.fromTransactions(transactions);
+    
+    currentUser!.transactionSheets.clear();
+    currentUser!.addTransactionSheet(sheet);
+    currentUser!.analyze();
+
+    // setState so all tabs get the freshly loaded data
+    setState(() {});
   }
 
 

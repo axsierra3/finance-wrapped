@@ -4,6 +4,7 @@ import 'package:flutter_finances_wrapped/app_theme.dart';
 import 'package:flutter_finances_wrapped/nav_tab_manager.dart';
 import 'package:flutter_finances_wrapped/user_handling/signup_page.dart';
 import 'package:flutter_finances_wrapped/auth_wrapper.dart';
+
 // SPLASH PAGE:
 // animated logo intro screen
 // plays once when app opens, then auto navigates
@@ -56,7 +57,7 @@ class _SplashPageState extends State<SplashPage>
     });
 
      // delay before animation starts — remove after recording!
-    Future.delayed(const Duration(seconds: 9), () {
+    Future.delayed(const Duration(seconds: 3), () {
       if (mounted) _controller.forward();
     });
   }

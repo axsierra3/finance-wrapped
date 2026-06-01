@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_finances_wrapped/app_theme.dart';
+import 'package:flutter_finances_wrapped/nav_tab_manager.dart';
 
 //Login page Widget supporting state changes
 class LoginPage extends StatefulWidget {
@@ -39,7 +40,12 @@ class _LoginPageState extends State<LoginPage> {
         setState(() {
           message = "You are logged in!";
           });
-
+          if (mounted) {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const NavTabManager()),
+                (route) => false,
+              );
+}
           } on FirebaseAuthException catch (error) {
           if (error.code == 'user-not-found') {
             setState (() {
